@@ -42,7 +42,8 @@ namespace hordemode
         private float _hordeEndTime;
         private const float HordeSpeed = 9f;
         private const float HordeStopDistance = 2.5f;
-        private const float HordeDuration = 25f;
+        // 기본 호드 시간
+        private float _baseHordeDuration = 25f;
 
         // ───── HUD 배너 ─────
         private float _hordeMessageUntil;
@@ -163,6 +164,7 @@ namespace hordemode
             }
         }
 
+        // 호드 허용 맵 판별
         private bool IsZeroZone()
         {
             string sceneName = GetCurrentSceneName();
@@ -171,35 +173,35 @@ namespace hordemode
 
             string lower = sceneName.ToLowerInvariant();
 
-            // ── 제로존 : Level_GroundZero_* ──
+            // 제로존 : Level_GroundZero_*
             if (lower.Contains("groundzero"))
                 return true;
 
-            // ── 벙커/기지 : Base 계열 ──
+            // 벙커/기지 : Base 계열
             if (lower.Contains("base"))
                 return true;
 
-            // ── 창고 구역 : Level_HiddenWarehouse ──
+            // 창고 구역 : Level_HiddenWarehouse
             if (lower.Contains("hiddenwarehouse"))
                 return true;
 
-            // ── 농장마을 남부 : Level_Farm_01 ──
+            // 농장마을 남부 : Level_Farm_01
             if (lower.Contains("farm_01"))
                 return true;
 
-            // ── 농장마을 : Level_Farm_Main ──
+            // 농장마을 : Level_Farm_Main
             if (lower.Contains("farm_main"))
                 return true;
 
-            // ── J-Lab 연구소 : JLab_1 및 level_jlab* ──
+            // J-Lab 연구소 : JLab_1 및 level_jlab*
             if (lower.Contains("jlab"))
                 return true;
 
-            // ── J-Lab 연구소 입구 : Farm_JLab_Facility ──
+            // J-Lab 연구소 입구 : Farm_JLab_Facility
             if (lower.Contains("farm_jlab_facility"))
                 return true;
 
-            // ── 폭풍 구역 : StormZone / Level_StormZone_* ──
+            // 폭풍 구역 : StormZone / Level_StormZone_*
             if (lower.Contains("stormzone"))
                 return true;
 
@@ -207,6 +209,31 @@ namespace hordemode
             return false;
         }
 
+        // 맵별 호드 지속 시간
+        private float GetHordeDurationForScene()
+        {
+            float duration = _baseHordeDuration;
+
+            string sceneName = GetCurrentSceneName();
+            if (string.IsNullOrEmpty(sceneName))
+                return duration;
+
+            string lower = sceneName.ToLowerInvariant();
+
+            // 농장마을 남부 / 농장마을 : 넓어서 오래 추격
+            if (lower.Contains("farm_01") || lower.Contains("farm_main"))
+                return 45f;
+
+            // 폭풍 구역: 약간 더 길게
+            if (lower.Contains("stormzone"))
+                return 40f;
+
+            // 창고 구역: 중간 정도
+            if (lower.Contains("hiddenwarehouse"))
+                return 30f;
+
+            return duration;
+        }
 
         // ───── CharacterMainControl.Main 리플렉션 ─────
 
@@ -510,7 +537,7 @@ namespace hordemode
             if (!IsZeroZone())
             {
                 string sceneName = GetCurrentSceneName();
-                Debug.Log("[HordeMode] 제로존 맵이 아니라서 호드 발동 안 함. scene=" + sceneName);
+                Debug.Log("[HordeMode] 이 맵에서는 호드 발동이 비활성화되어 있습니다. scene=" + sceneName);
                 yield break;
             }
 
@@ -526,10 +553,14 @@ namespace hordemode
 
             _hordeMessageUntil = Time.time + 3f;
 
+            // 약간 딜레이 후 추격 시작
             yield return new WaitForSeconds(1.5f);
 
+            float duration = GetHordeDurationForScene();
             _hordeActive = true;
-            _hordeEndTime = Time.time + HordeDuration;
+            _hordeEndTime = Time.time + duration;
+
+            Debug.Log("[HordeMode] Horde duration = " + duration + "s (scene=" + GetCurrentSceneName() + ")");
         }
 
         // ───── 적 이동 ─────
