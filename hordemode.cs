@@ -50,6 +50,13 @@ namespace hordemode
         private GUIStyle _bannerStyle;
         private GUIStyle _bannerOutlineStyle;
 
+        // ───── 적 스캔 진행 HUD ─────
+        private float _scanUiStartTime;
+        private float _scanUiDuration = 1.2f;   // 스캔 진행 바 연출 시간
+        private int _scanEnemyCount;
+        private bool _scanUiActive;
+        private GUIStyle _scanStyle;
+
         // ───── EnemyTracker 리플렉션용 ─────
         private bool _trackerBound;
         private bool _trackerTried;
@@ -108,45 +115,96 @@ namespace hordemode
                 Event.current.type != EventType.Layout)
                 return;
 
-            if (Time.time > _hordeMessageUntil)
-                return;
-
             if (_bannerStyle == null)
                 SetupGuiStyle();
 
-            string text = "무언가 다가옵니다!";
-
-            float width = 600f;
-            float height = 60f;
-            float x = (Screen.width - width) / 2f;
-            float y = 80f;
-
-            Rect rect = new Rect(x, y, width, height);
-
-            // 그림자
-            if (_bannerOutlineStyle != null)
+            // ── 호드 경고 배너 ("무언가 다가옵니다!") ──
+            if (Time.time <= _hordeMessageUntil)
             {
-                Rect shadow = rect;
-                shadow.x += 2f;
-                shadow.y += 2f;
-                GUI.Label(shadow, text, _bannerOutlineStyle);
+                string text = "무언가 다가옵니다!";
+
+                float width = 600f;
+                float height = 60f;
+                float x = (Screen.width - width) / 2f;
+                float y = 80f;
+
+                Rect rect = new Rect(x, y, width, height);
+
+                // 그림자
+                if (_bannerOutlineStyle != null)
+                {
+                    Rect shadow = rect;
+                    shadow.x += 2f;
+                    shadow.y += 2f;
+                    GUI.Label(shadow, text, _bannerOutlineStyle);
+                }
+
+                // 본문
+                GUI.Label(rect, text, _bannerStyle);
             }
 
-            // 본문
-            GUI.Label(rect, text, _bannerStyle);
+            // ── 적 스캔 진행 퍼센트 표시 ──
+            if (_scanUiActive && _scanStyle != null)
+            {
+                float elapsed = Time.time - _scanUiStartTime;
+                if (elapsed < 0f || elapsed > _scanUiDuration)
+                {
+                    _scanUiActive = false;
+                }
+                else
+                {
+                    float t = elapsed / _scanUiDuration;
+                    if (t < 0f) t = 0f;
+                    if (t > 1f) t = 1f;
+
+                    float percent = t * 100f;
+                    string scanText = string.Format(
+                        "적 스캔 중... {0:0}% (감지된 적 {1}명)",
+                        percent, _scanEnemyCount
+                    );
+
+                    // 좌상단 약간 아래
+                    // 오른쪽 위로 이동 (시계 안 가리게)
+float scanWidth = 400f;
+float scanX = Screen.width - scanWidth - 40f;   // 오른쪽에서 40px 안쪽
+float scanY = 40f;
+
+Rect scanRect = new Rect(scanX, scanY, scanWidth, 30f);
+GUI.Label(scanRect, scanText, _scanStyle);
+
+                    if (t >= 1f)
+                        _scanUiActive = false;
+                }
+            }
         }
 
         private void SetupGuiStyle()
         {
-            _bannerStyle = new GUIStyle(GUI.skin.label);
-            _bannerStyle.alignment = TextAnchor.MiddleCenter;
-            _bannerStyle.fontSize = 28;
-            _bannerStyle.fontStyle = FontStyle.Bold;
-            _bannerStyle.normal.textColor = Color.red;
-            _bannerStyle.padding = new RectOffset(8, 8, 4, 4);
+            if (_bannerStyle == null)
+            {
+                _bannerStyle = new GUIStyle(GUI.skin.label);
+                _bannerStyle.alignment = TextAnchor.MiddleCenter;
+                _bannerStyle.fontSize = 28;
+                _bannerStyle.fontStyle = FontStyle.Bold;
+                _bannerStyle.normal.textColor = Color.red;
+                _bannerStyle.padding = new RectOffset(8, 8, 4, 4);
+            }
 
-            _bannerOutlineStyle = new GUIStyle(_bannerStyle);
-            _bannerOutlineStyle.normal.textColor = Color.black;
+            if (_bannerOutlineStyle == null)
+            {
+                _bannerOutlineStyle = new GUIStyle(_bannerStyle);
+                _bannerOutlineStyle.normal.textColor = Color.black;
+            }
+
+            if (_scanStyle == null)
+            {
+                _scanStyle = new GUIStyle(GUI.skin.label);
+                _scanStyle.alignment = TextAnchor.UpperLeft;
+                _scanStyle.fontSize = 16;
+                _scanStyle.fontStyle = FontStyle.Normal;
+                _scanStyle.normal.textColor = Color.yellow;
+                _scanStyle.padding = new RectOffset(4, 4, 4, 4);
+            }
         }
 
         // ───── 씬 / 맵 이름 ─────
@@ -471,6 +529,11 @@ namespace hordemode
                 _enemies.Clear();
                 _playerTransform = FindPlayerTransform();
 
+                // 스캔 HUD 시작
+                _scanUiStartTime = Time.time;
+                _scanUiActive = true;
+                _scanEnemyCount = 0;
+
                 if (!TryBindEnemyTracker())
                 {
                     Debug.Log("[HordeMode] EnemyTracker 연동 실패 - 적 스캔 불가");
@@ -517,6 +580,8 @@ namespace hordemode
 
                     _enemies.Add(charTransform);
                 }
+
+                _scanEnemyCount = _enemies.Count;
 
                 string sceneName = GetCurrentSceneName();
                 Debug.Log("[HordeMode] EnemyTracker 기반 스캔 완료 (scene=" + sceneName +
