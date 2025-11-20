@@ -53,9 +53,15 @@ namespace hordemode
         // ───── 적 스캔 진행 HUD ─────
         private float _scanUiStartTime;
         private float _scanUiDuration = 1.2f;   // 스캔 진행 바 연출 시간
-        private int _scanEnemyCount;
+        private int _scanEnemyCount;            // 마지막 스캔에서 감지된 적 수
         private bool _scanUiActive;
         private GUIStyle _scanStyle;
+        private GUIStyle _scanMaxStyle;         // 100% / 준비완료용(하늘색)
+
+        // “준비 완료” 판단용: 최대 감지 수 + 마지막으로 값이 증가한 시간
+        private int _maxDetectedEnemies;
+        private float _lastIncreaseTime;
+        private const float ReadyDelaySeconds = 5f;
 
         // ───── EnemyTracker 리플렉션용 ─────
         private bool _trackerBound;
@@ -163,18 +169,45 @@ namespace hordemode
                         percent, _scanEnemyCount
                     );
 
-                    // 좌상단 약간 아래
-                    // 오른쪽 위로 이동 (시계 안 가리게)
-float scanWidth = 400f;
-float scanX = Screen.width - scanWidth - 40f;   // 오른쪽에서 40px 안쪽
-float scanY = 40f;
+                    // 오른쪽 위 (시계 안 가리게)
+                    float scanWidth = 400f;
+                    float scanX = Screen.width - scanWidth - 40f;   // 오른쪽에서 40px 안쪽
+                    float scanY = 40f;
 
-Rect scanRect = new Rect(scanX, scanY, scanWidth, 30f);
-GUI.Label(scanRect, scanText, _scanStyle);
+                    Rect scanRect = new Rect(scanX, scanY, scanWidth, 30f);
 
-                    if (t >= 1f)
-                        _scanUiActive = false;
+                    // 100%에 가까우면 하늘색 스타일로
+                    GUIStyle styleToUse = _scanStyle;
+                    if (t >= 1f && _scanMaxStyle != null)
+                    {
+                        styleToUse = _scanMaxStyle;
+                    }
+
+                    GUI.Label(scanRect, scanText, styleToUse);
                 }
+            }
+
+            // ── 감지된 적 수가 더 이상 안 오르면 "준비 완료" ──
+            bool ready =
+                !_hordeActive &&
+                _maxDetectedEnemies > 0 &&
+                _lastIncreaseTime > 0f &&
+                (Time.time - _lastIncreaseTime) >= ReadyDelaySeconds;
+
+            if (ready)
+            {
+                string readyText = string.Format(
+                    "감지된 적 {0}명 (준비 완료)",
+                    _maxDetectedEnemies
+                );
+
+                float width = 400f;
+                float x = Screen.width - width - 40f;
+                float y = 70f; // 스캔 퍼센트 아래 줄
+
+                Rect rect = new Rect(x, y, width, 30f);
+                GUIStyle style = _scanMaxStyle ?? _scanStyle;
+                GUI.Label(rect, readyText, style);
             }
         }
 
@@ -204,6 +237,12 @@ GUI.Label(scanRect, scanText, _scanStyle);
                 _scanStyle.fontStyle = FontStyle.Normal;
                 _scanStyle.normal.textColor = Color.yellow;
                 _scanStyle.padding = new RectOffset(4, 4, 4, 4);
+            }
+
+            if (_scanMaxStyle == null)
+            {
+                _scanMaxStyle = new GUIStyle(_scanStyle);
+                _scanMaxStyle.normal.textColor = Color.cyan;   // 하늘색
             }
         }
 
@@ -537,6 +576,8 @@ GUI.Label(scanRect, scanText, _scanStyle);
                 if (!TryBindEnemyTracker())
                 {
                     Debug.Log("[HordeMode] EnemyTracker 연동 실패 - 적 스캔 불가");
+                    _maxDetectedEnemies = 0;
+                    _lastIncreaseTime = 0f;
                     return;
                 }
 
@@ -545,6 +586,8 @@ GUI.Label(scanRect, scanText, _scanStyle);
                 if (enumerable == null)
                 {
                     Debug.Log("[HordeMode] EnemyTracker.GetLiveEnemies 반환값이 IEnumerable 아님");
+                    _maxDetectedEnemies = 0;
+                    _lastIncreaseTime = 0f;
                     return;
                 }
 
@@ -582,6 +625,21 @@ GUI.Label(scanRect, scanText, _scanStyle);
                 }
 
                 _scanEnemyCount = _enemies.Count;
+
+                // “값이 더 이상 상승하지 않을 때” 판단용 최대값/시간 업데이트
+                if (_scanEnemyCount <= 0)
+                {
+                    _maxDetectedEnemies = 0;
+                    _lastIncreaseTime = 0f;
+                }
+                else
+                {
+                    if (_scanEnemyCount > _maxDetectedEnemies)
+                    {
+                        _maxDetectedEnemies = _scanEnemyCount;
+                        _lastIncreaseTime = Time.time; // 마지막으로 값이 증가한 시점
+                    }
+                }
 
                 string sceneName = GetCurrentSceneName();
                 Debug.Log("[HordeMode] EnemyTracker 기반 스캔 완료 (scene=" + sceneName +
