@@ -1,0 +1,76 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>false</ImplicitUsings>
+    <AssemblyName>hordemode</AssemblyName>
+    <RootNamespace>hordemode</RootNamespace>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <!-- 별도 Compile 항목 안 씀: 폴더 안 .cs 자동 포함 -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- BepInEx 플러그인 베이스 -->
+
+    <!-- 게임 메인 어셈블리 -->
+    <Reference Include="Assembly-CSharp">
+      <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Escape from Duckov\Duckov_Data\Managed\Assembly-CSharp.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+
+    <!-- 옛날 UnityEngine.dll (MonoBehaviour, Input 등 참조 해결) -->
+    <Reference Include="UnityEngine">
+      <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Escape from Duckov\Duckov_Data\Managed\UnityEngine.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+
+    <!-- CoreModule (요즘 대부분 타입) -->
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Escape from Duckov\Duckov_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+
+    <!-- Input (Input.GetKeyDown 등) -->
+    <Reference Include="UnityEngine.InputLegacyModule">
+      <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Escape from Duckov\Duckov_Data\Managed\UnityEngine.InputLegacyModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+
+    <!-- OnGUI, GUI, GUIStyle -->
+    <Reference Include="UnityEngine.IMGUIModule">
+      <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Escape from Duckov\Duckov_Data\Managed\UnityEngine.IMGUIModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+
+    <!-- TextAnchor 등 텍스트 렌더링 -->
+    <Reference Include="UnityEngine.TextRenderingModule">
+      <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Escape from Duckov\Duckov_Data\Managed\UnityEngine.TextRenderingModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+	    
+		<Reference Include="FOW">
+      <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Escape from Duckov\Duckov_Data\Managed\FOW.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+
+
+    <!-- 네가 보여준 TeamSoda DLL 둘 -->
+    <Reference Include="TeamSoda.Duckov.Utilities">
+      <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Escape from Duckov\Duckov_Data\Managed\TeamSoda.Duckov.Utilities.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+
+    <Reference Include="TeamSoda.Duckov.Core">
+      <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Escape from Duckov\Duckov_Data\Managed\TeamSoda.Duckov.Core.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+
+    <!-- .NET 기본 -->
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+  </ItemGroup>
+</Project>
