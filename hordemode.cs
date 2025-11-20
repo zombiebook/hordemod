@@ -170,8 +170,43 @@ namespace hordemode
                 return false;
 
             string lower = sceneName.ToLowerInvariant();
-            return lower.Contains("groundzero");
+
+            // ── 제로존 : Level_GroundZero_* ──
+            if (lower.Contains("groundzero"))
+                return true;
+
+            // ── 벙커/기지 : Base 계열 ──
+            if (lower.Contains("base"))
+                return true;
+
+            // ── 창고 구역 : Level_HiddenWarehouse ──
+            if (lower.Contains("hiddenwarehouse"))
+                return true;
+
+            // ── 농장마을 남부 : Level_Farm_01 ──
+            if (lower.Contains("farm_01"))
+                return true;
+
+            // ── 농장마을 : Level_Farm_Main ──
+            if (lower.Contains("farm_main"))
+                return true;
+
+            // ── J-Lab 연구소 : JLab_1 및 level_jlab* ──
+            if (lower.Contains("jlab"))
+                return true;
+
+            // ── J-Lab 연구소 입구 : Farm_JLab_Facility ──
+            if (lower.Contains("farm_jlab_facility"))
+                return true;
+
+            // ── 폭풍 구역 : StormZone / Level_StormZone_* ──
+            if (lower.Contains("stormzone"))
+                return true;
+
+            // 위 조건에 안 걸리면 호드 비활성 맵
+            return false;
         }
+
 
         // ───── CharacterMainControl.Main 리플렉션 ─────
 
