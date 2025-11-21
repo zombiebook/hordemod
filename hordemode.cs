@@ -1,7 +1,6 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Reflection;
 using UnityEngine;
 
 namespace hordemode
@@ -42,41 +41,25 @@ namespace hordemode
         private float _hordeEndTime;
         private const float HordeSpeed = 9f;
         private const float HordeStopDistance = 2.5f;
-        // 기본 호드 시간
         private float _baseHordeDuration = 25f;
 
-        // ───── HUD 배너 ─────
+        // ───── HUD 배너 ("무언가 다가옵니다!") ─────
         private float _hordeMessageUntil;
         private GUIStyle _bannerStyle;
         private GUIStyle _bannerOutlineStyle;
 
         // ───── 적 스캔 진행 HUD ─────
         private float _scanUiStartTime;
-        private float _scanUiDuration = 1.2f;   // 스캔 진행 바 연출 시간
-        private int _scanEnemyCount;            // 마지막 스캔에서 감지된 적 수
+        private float _scanUiDuration = 1.2f;   // 스캔 퍼센트 애니메이션 시간
+        private int _scanEnemyCount;
         private bool _scanUiActive;
         private GUIStyle _scanStyle;
-        private GUIStyle _scanMaxStyle;         // 100% / 준비완료용(하늘색)
+        private GUIStyle _scanMaxStyle;         // 100% / 준비완료용 (하늘색)
 
-        // “준비 완료” 판단용: 최대 감지 수 + 마지막으로 값이 증가한 시간
+        // “준비 완료” 판단용
         private int _maxDetectedEnemies;
         private float _lastIncreaseTime;
         private const float ReadyDelaySeconds = 5f;
-
-        // ───── EnemyTracker 리플렉션용 ─────
-        private bool _trackerBound;
-        private bool _trackerTried;
-        private Type _trackerType;
-        private MethodInfo _getLiveEnemiesMethod;
-        private Type _enemyInfoType;
-        private FieldInfo _enemyInfoCharacterField;
-
-        // ───── CharacterMainControl(Main) 리플렉션용 ─────
-        private bool _playerTypeBound;
-        private bool _playerTypeTried;
-        private Type _characterMainType;
-        private FieldInfo _characterMainField;
-        private PropertyInfo _characterMainProperty;
 
         private void Awake()
         {
@@ -86,14 +69,14 @@ namespace hordemode
 
         private void Update()
         {
-            // 호드 아닐 때만 주기 스캔
+            // 호드 안 돌 때만 주기적으로 스캔
             if (!_hordeActive && Time.time >= _nextScanTime)
             {
                 _nextScanTime = Time.time + ScanInterval;
                 RescanCharacters();
             }
 
-            // F7 = 호드 트리거
+            // F7 = 호드 발동
             if (Input.GetKeyDown(KeyCode.F7))
             {
                 StartCoroutine(TriggerHordeWave());
@@ -102,17 +85,16 @@ namespace hordemode
 
         private void LateUpdate()
         {
-            if (_hordeActive)
+            if (!_hordeActive)
+                return;
+
+            if (Time.time > _hordeEndTime)
             {
-                if (Time.time > _hordeEndTime)
-                {
-                    _hordeActive = false;
-                }
-                else
-                {
-                    DoHordeChaseStep();
-                }
+                _hordeActive = false;
+                return;
             }
+
+            DoHordeChaseStep();
         }
 
         private void OnGUI()
@@ -149,7 +131,7 @@ namespace hordemode
                 GUI.Label(rect, text, _bannerStyle);
             }
 
-            // ── 적 스캔 진행 퍼센트 표시 ──
+            // ── 적 스캔 진행 퍼센트 ──
             if (_scanUiActive && _scanStyle != null)
             {
                 float elapsed = Time.time - _scanUiStartTime;
@@ -169,19 +151,15 @@ namespace hordemode
                         percent, _scanEnemyCount
                     );
 
-                    // 오른쪽 위 (시계 안 가리게)
                     float scanWidth = 400f;
-                    float scanX = Screen.width - scanWidth - 40f;   // 오른쪽에서 40px 안쪽
+                    float scanX = Screen.width - scanWidth - 40f;  // 오른쪽에서 40px 안쪽
                     float scanY = 40f;
 
                     Rect scanRect = new Rect(scanX, scanY, scanWidth, 30f);
 
-                    // 100%에 가까우면 하늘색 스타일로
                     GUIStyle styleToUse = _scanStyle;
                     if (t >= 1f && _scanMaxStyle != null)
-                    {
                         styleToUse = _scanMaxStyle;
-                    }
 
                     GUI.Label(scanRect, scanText, styleToUse);
                 }
@@ -261,8 +239,8 @@ namespace hordemode
             }
         }
 
-        // 호드 허용 맵 판별
-        private bool IsZeroZone()
+        // 호드 허용 맵
+        private bool IsHordeAllowedMap()
         {
             string sceneName = GetCurrentSceneName();
             if (string.IsNullOrEmpty(sceneName))
@@ -302,7 +280,6 @@ namespace hordemode
             if (lower.Contains("stormzone"))
                 return true;
 
-            // 위 조건에 안 걸리면 호드 비활성 맵
             return false;
         }
 
@@ -332,319 +309,151 @@ namespace hordemode
             return duration;
         }
 
-        // ───── CharacterMainControl.Main 리플렉션 ─────
-
-        private bool TryBindCharacterMain()
-        {
-            if (_playerTypeBound)
-                return true;
-
-            if (_playerTypeTried && _characterMainType == null)
-                return false;
-
-            _playerTypeTried = true;
-
-            try
-            {
-                // 1차: 이름으로 바로 찾기
-                Assembly[] asms = AppDomain.CurrentDomain.GetAssemblies();
-                for (int ai = 0; ai < asms.Length; ai++)
-                {
-                    Assembly asm = asms[ai];
-                    if (asm == null) continue;
-
-                    Type t = asm.GetType("CharacterMainControl");
-                    if (t == null)
-                    {
-                        t = asm.GetType("Duckov.CharacterMainControl");
-                    }
-
-                    if (t != null)
-                    {
-                        _characterMainType = t;
-                        break;
-                    }
-                }
-
-                // 2차: 타입 전체 스캔
-                if (_characterMainType == null)
-                {
-                    Assembly[] asms2 = AppDomain.CurrentDomain.GetAssemblies();
-                    for (int ai = 0; ai < asms2.Length && _characterMainType == null; ai++)
-                    {
-                        Assembly asm = asms2[ai];
-                        if (asm == null) continue;
-
-                        Type[] types;
-                        try
-                        {
-                            types = asm.GetTypes();
-                        }
-                        catch
-                        {
-                            continue;
-                        }
-
-                        for (int ti = 0; ti < types.Length; ti++)
-                        {
-                            Type t = types[ti];
-                            if (t == null) continue;
-                            if (t.Name == "CharacterMainControl")
-                            {
-                                _characterMainType = t;
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                if (_characterMainType == null)
-                {
-                    Debug.Log("[HordeMode] CharacterMainControl 타입을 찾지 못함");
-                    return false;
-                }
-
-                _characterMainField = _characterMainType.GetField(
-                    "Main",
-                    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
-
-                _characterMainProperty = _characterMainType.GetProperty(
-                    "Main",
-                    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
-
-                if (_characterMainField == null && _characterMainProperty == null)
-                {
-                    Debug.Log("[HordeMode] CharacterMainControl.Main 필드/프로퍼티 없음");
-                    return false;
-                }
-
-                _playerTypeBound = true;
-                return true;
-            }
-            catch (Exception ex)
-            {
-                Debug.Log("[HordeMode] TryBindCharacterMain 예외: " + ex);
-                return false;
-            }
-        }
-
-        private Transform FindPlayerTransform()
-        {
-            try
-            {
-                if (TryBindCharacterMain())
-                {
-                    object mainObj = null;
-                    if (_characterMainProperty != null)
-                    {
-                        mainObj = _characterMainProperty.GetValue(null, null);
-                    }
-                    else if (_characterMainField != null)
-                    {
-                        mainObj = _characterMainField.GetValue(null);
-                    }
-
-                    Component comp = mainObj as Component;
-                    if (comp != null && comp.transform != null)
-                    {
-                        return comp.transform;
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.Log("[HordeMode] FindPlayerTransform(Main) 예외: " + ex);
-            }
-
-            // 실패 시 카메라 루트로 폴백
-            try
-            {
-                Camera cam = Camera.main;
-                if (cam != null && cam.transform != null)
-                {
-                    return cam.transform.root;
-                }
-            }
-            catch
-            {
-            }
-
-            return null;
-        }
-
-        // ───── EnemyTracker 바인딩 ─────
-
-        private bool TryBindEnemyTracker()
-        {
-            if (_trackerBound)
-                return true;
-
-            if (_trackerTried && _trackerType == null)
-                return false;
-
-            _trackerTried = true;
-
-            try
-            {
-                Assembly[] asms = AppDomain.CurrentDomain.GetAssemblies();
-                for (int i = 0; i < asms.Length; i++)
-                {
-                    Assembly a = asms[i];
-                    if (a == null) continue;
-
-                    Type t = a.GetType("DuckovCheatUI.Utiles.EnemyTracker");
-                    if (t != null)
-                    {
-                        _trackerType = t;
-                        break;
-                    }
-                }
-
-                if (_trackerType == null)
-                {
-                    Debug.Log("[HordeMode] EnemyTracker 타입을 찾지 못함 (치트 모드 필요)");
-                    return false;
-                }
-
-                _getLiveEnemiesMethod = _trackerType.GetMethod(
-                    "GetLiveEnemies",
-                    BindingFlags.Public | BindingFlags.Static);
-
-                if (_getLiveEnemiesMethod == null)
-                {
-                    Debug.Log("[HordeMode] EnemyTracker.GetLiveEnemies 메서드를 찾지 못함");
-                    return false;
-                }
-
-                _enemyInfoType = _trackerType.GetNestedType(
-                    "EnemyInfo",
-                    BindingFlags.Public | BindingFlags.NonPublic);
-
-                if (_enemyInfoType == null)
-                {
-                    Debug.Log("[HordeMode] EnemyTracker.EnemyInfo 타입을 찾지 못함");
-                    return false;
-                }
-
-                _enemyInfoCharacterField = _enemyInfoType.GetField(
-                    "character",
-                    BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic);
-
-                if (_enemyInfoCharacterField == null)
-                {
-                    Debug.Log("[HordeMode] EnemyInfo.character 필드를 찾지 못함");
-                    return false;
-                }
-
-                _trackerBound = true;
-                Debug.Log("[HordeMode] EnemyTracker 연동 완료");
-                return true;
-            }
-            catch (Exception ex)
-            {
-                Debug.Log("[HordeMode] TryBindEnemyTracker 예외: " + ex);
-                return false;
-            }
-        }
-
-        private Transform ToTransform(object obj)
-        {
-            if (obj == null) return null;
-
-            Transform tr = obj as Transform;
-            if (tr != null) return tr;
-
-            Component comp = obj as Component;
-            if (comp != null) return comp.transform;
-
-            return null;
-        }
-
-        // ───── EnemyTracker 기반 캐릭터 스캔 ─────
+        // ───── 캐릭터 스캔 (CharacterMainControl 직통) ─────
         private void RescanCharacters()
         {
             try
             {
                 _enemies.Clear();
-                _playerTransform = FindPlayerTransform();
+                _playerTransform = null;
 
                 // 스캔 HUD 시작
                 _scanUiStartTime = Time.time;
                 _scanUiActive = true;
                 _scanEnemyCount = 0;
 
-                if (!TryBindEnemyTracker())
+                CharacterMainControl main = null;
+
+                // 메인 캐릭터 (플레이어)
+                try
                 {
-                    Debug.Log("[HordeMode] EnemyTracker 연동 실패 - 적 스캔 불가");
-                    _maxDetectedEnemies = 0;
-                    _lastIncreaseTime = 0f;
-                    return;
+                    main = CharacterMainControl.Main;
+                }
+                catch (Exception ex)
+                {
+                    Debug.Log("[HordeMode] CharacterMainControl.Main 접근 예외: " + ex);
                 }
 
-                object listObj = _getLiveEnemiesMethod.Invoke(null, null);
-                IEnumerable enumerable = listObj as IEnumerable;
-                if (enumerable == null)
+                if (main != null && main.transform != null)
                 {
-                    Debug.Log("[HordeMode] EnemyTracker.GetLiveEnemies 반환값이 IEnumerable 아님");
-                    _maxDetectedEnemies = 0;
-                    _lastIncreaseTime = 0f;
-                    return;
+                    _playerTransform = main.transform;
                 }
 
-                HashSet<Transform> added = new HashSet<Transform>();
-                int liveCount = 0;
-
-                foreach (object enemyInfoObj in enumerable)
+                // 플레이어 못찾으면 카메라 루트로 폴백
+                if (_playerTransform == null)
                 {
-                    if (enemyInfoObj == null) continue;
-
-                    object charObj = _enemyInfoCharacterField.GetValue(enemyInfoObj);
-                    Component chComp = charObj as Component;
-                    if (chComp == null) continue;
-
-                    Transform charTransform = chComp.transform;
-                    if (charTransform == null) continue;
-
-                    liveCount++;
-
-                    // 혹시라도 플레이어 트리랑 겹치면 방어
-                    if (_playerTransform != null)
+                    try
                     {
-                        if (charTransform == _playerTransform ||
-                            charTransform.IsChildOf(_playerTransform) ||
-                            _playerTransform.IsChildOf(charTransform))
+                        Camera cam = Camera.main;
+                        if (cam != null && cam.transform != null)
                         {
-                            continue;
+                            _playerTransform = cam.transform.root;
+                        }
+                    }
+                    catch
+                    {
+                    }
+                }
+
+                CharacterMainControl[] allChars = null;
+                try
+                {
+                    allChars = UnityEngine.Object.FindObjectsOfType<CharacterMainControl>(true);
+                }
+                catch (Exception ex)
+                {
+                    Debug.Log("[HordeMode] FindObjectsOfType<CharacterMainControl> 예외: " + ex);
+                    allChars = null;
+                }
+
+                int enemies = 0;
+                int total = 0;
+
+                if (allChars != null)
+                {
+                    // 혹시 Main이 배열 안에 있으면 그 transform을 확실히 플레이어로 사용
+                    if (main != null)
+                    {
+                        for (int i = 0; i < allChars.Length; i++)
+                        {
+                            CharacterMainControl c = allChars[i];
+                            if (c == null) continue;
+                            if (c == main && c.transform != null)
+                            {
+                                _playerTransform = c.transform;
+                                break;
+                            }
                         }
                     }
 
-                    if (!added.Add(charTransform))
-                        continue;
+                    for (int i = 0; i < allChars.Length; i++)
+                    {
+                        CharacterMainControl c = allChars[i];
+                        if (c == null) continue;
 
-                    _enemies.Add(charTransform);
+                        Transform tr = c.transform;
+                        if (tr == null) continue;
+
+                        total++;
+
+                        // 플레이어 자신은 패스
+                        if (main != null && c == main)
+                            continue;
+
+                        // 같은 팀(아군) 패스
+                        if (main != null)
+                        {
+                            try
+                            {
+                                if (c.Team == main.Team)
+                                    continue;
+                            }
+                            catch
+                            {
+                            }
+                        }
+
+                        // 죽은 애 패스
+                        try
+                        {
+                            if (c.Health != null && c.Health.IsDead)
+                                continue;
+                        }
+                        catch
+                        {
+                        }
+
+                        // 펫 이름 제외 ("pet" 들어가면 스킵)
+                        string goName = (tr.gameObject != null ? tr.gameObject.name : null);
+                        if (!string.IsNullOrEmpty(goName))
+                        {
+                            string lower = goName.ToLowerInvariant();
+                            if (lower.Contains("pet"))
+                                continue;
+                        }
+
+                        _enemies.Add(tr);
+                        enemies++;
+                    }
                 }
 
-                _scanEnemyCount = _enemies.Count;
+                _scanEnemyCount = enemies;
 
-                // “값이 더 이상 상승하지 않을 때” 판단용 최대값/시간 업데이트
                 if (_scanEnemyCount <= 0)
                 {
                     _maxDetectedEnemies = 0;
                     _lastIncreaseTime = 0f;
                 }
-                else
+                else if (_scanEnemyCount > _maxDetectedEnemies)
                 {
-                    if (_scanEnemyCount > _maxDetectedEnemies)
-                    {
-                        _maxDetectedEnemies = _scanEnemyCount;
-                        _lastIncreaseTime = Time.time; // 마지막으로 값이 증가한 시점
-                    }
+                    _maxDetectedEnemies = _scanEnemyCount;
+                    _lastIncreaseTime = Time.time;
                 }
 
-                string sceneName = GetCurrentSceneName();
-                Debug.Log("[HordeMode] EnemyTracker 기반 스캔 완료 (scene=" + sceneName +
-                          ") - liveEnemies=" + liveCount +
-                          ", uniqueEnemies=" + _enemies.Count +
+                string scene = GetCurrentSceneName();
+                Debug.Log("[HordeMode] 캐릭터 스캔 완료 (scene=" + scene +
+                          ") - characters=" + (allChars != null ? allChars.Length : 0) +
+                          ", enemies=" + enemies +
                           ", player=" + (_playerTransform != null));
             }
             catch (Exception ex)
@@ -654,10 +463,9 @@ namespace hordemode
         }
 
         // ───── 호드 발동 ─────
-
         private IEnumerator TriggerHordeWave()
         {
-            if (!IsZeroZone())
+            if (!IsHordeAllowedMap())
             {
                 string sceneName = GetCurrentSceneName();
                 Debug.Log("[HordeMode] 이 맵에서는 호드 발동이 비활성화되어 있습니다. scene=" + sceneName);
@@ -687,7 +495,6 @@ namespace hordemode
         }
 
         // ───── 적 이동 ─────
-
         private void DoHordeChaseStep()
         {
             if (_playerTransform == null)
